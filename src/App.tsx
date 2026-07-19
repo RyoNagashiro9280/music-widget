@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
-import { ArrowUpFromLine, Disc3, Radio, ExternalLink, Info, X } from "lucide-react";
+import { ArrowUpFromLine, Disc3, Radio, ExternalLink, Info, X, Sliders } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
@@ -11,6 +11,11 @@ export default function App() {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
   const [isPlaying, setIsPlaying] = useState(true);
+  const [showSettings, setShowSettings] = useState(false);
+  const [sensitivity, setSensitivity] = useState(100);
+  const [smoothing, setSmoothing] = useState(60);
+  const [vfdFont, setVfdFont] = useState<"pixel" | "vfd" | "dot" | "digital">("pixel");
+  const [vfdScrollSteps, setVfdScrollSteps] = useState(false);
   
   const [eqPreset, setEqPreset] = useState("FLAT");
   const [bassBoost, setBassBoost] = useState(false);
@@ -149,8 +154,19 @@ export default function App() {
       } catch (e) {}
     };
 
+    const fetchVisualizerSettings = async () => {
+      try {
+        const settings: [number, number] = await invoke("get_visualizer_settings");
+        setSensitivity(settings[0]);
+        setSmoothing(settings[1]);
+      } catch (e) {
+        console.error("Failed to load visualizer settings:", e);
+      }
+    };
+
     fetchMediaInfo();
     fetchVolume();
+    fetchVisualizerSettings();
     const interval = setInterval(fetchMediaInfo, 1000);
 
     const unlistenAudio = listen("audio-spectrum", (event: any) => {
@@ -185,25 +201,38 @@ export default function App() {
     try { await invoke("media_skip_previous"); } catch (e) {}
   };
 
-  const handleVolumeScroll = async (e: React.WheelEvent) => {
-    const delta = e.deltaY > 0 ? -0.05 : 0.05;
-    const newVol = Math.min(Math.max(volume + delta, 0), 1);
+  const adjustVolume = async (stepDelta: number) => {
+    const currentSteps = Math.round(volume * 35);
+    const nextSteps = Math.max(0, Math.min(35, currentSteps + stepDelta));
+    const newVol = nextSteps / 35;
     setVolume(newVol);
     try {
       await invoke("set_system_volume", { level: newVol });
     } catch (err) { 
       console.error("Volume error:", err); 
-      alert("Volume error: " + err);
     }
   };
 
-  const adjustVolume = async (amount: number) => {
-    const newVol = Math.min(Math.max(volume + amount, 0), 1);
-    setVolume(newVol);
+  const handleVolumeScroll = async (e: React.WheelEvent) => {
+    const direction = e.deltaY > 0 ? -1 : 1;
+    await adjustVolume(direction);
+  };
+
+  const handleSensitivityChange = async (val: number) => {
+    setSensitivity(val);
     try {
-      await invoke("set_system_volume", { level: newVol });
-    } catch (err) { 
-      console.error("Volume error:", err); 
+      await invoke("set_visualizer_settings", { sensitivity: val, smoothing });
+    } catch (e) {
+      console.error("Failed to save sensitivity:", e);
+    }
+  };
+
+  const handleSmoothingChange = async (val: number) => {
+    setSmoothing(val);
+    try {
+      await invoke("set_visualizer_settings", { sensitivity, smoothing: val });
+    } catch (e) {
+      console.error("Failed to save smoothing:", e);
     }
   };
 
@@ -222,12 +251,12 @@ export default function App() {
       const win = getCurrentWindow();
       if (nextState) {
         // Just resize first to ensure it works. 
-        await win.setSize(new LogicalSize(800, 640));
+        await win.setSize(new LogicalSize(800, 840));
         setIsExpanded(true);
       } else {
         setIsExpanded(false);
         setTimeout(async () => {
-          await win.setSize(new LogicalSize(800, 240));
+          await win.setSize(new LogicalSize(800, 450));
         }, 500); 
       }
     } catch (e) {
@@ -240,6 +269,41 @@ export default function App() {
 
   const isSpotifyMode = songData.source_app.toLowerCase().includes("spotify");
 
+  const getThemeTextClass = () => {
+    switch (themeColor) {
+      case 'cyan': return 'text-cyan-400';
+      case 'green': return 'text-emerald-400';
+      case 'orange': return 'text-orange-400';
+      default: return 'text-blue-400';
+    }
+  };
+
+  const getThemeAccentClass = () => {
+    switch (themeColor) {
+      case 'cyan': return 'accent-cyan-500';
+      case 'green': return 'accent-emerald-500';
+      case 'orange': return 'accent-orange-500';
+      default: return 'accent-blue-500';
+    }
+  };
+
+  const getThemeBgClass = () => {
+    switch (themeColor) {
+      case 'cyan': return 'bg-cyan-500';
+      case 'green': return 'bg-emerald-500';
+      case 'orange': return 'bg-orange-500';
+      default: return 'bg-blue-600';
+    }
+  };
+
+  const getThemeGradientClass = () => {
+    switch (themeColor) {
+      case 'cyan': return 'from-cyan-500/30 to-blue-900/40';
+      case 'green': return 'from-green-500/20 to-emerald-900/40';
+      case 'orange': return 'from-orange-500/30 to-red-900/40';
+      default: return 'from-indigo-500 to-purple-600';
+    }
+  };
   const handleOpenBrowser = async () => {
     try {
       const query = encodeURIComponent(`${songData.title} ${songData.artist}`);
@@ -251,11 +315,11 @@ export default function App() {
 
   // Heisei VFD Visualizer logic (16-band)
   const renderDpxBand = (val: number) => {
-    // val is 0.0 ~ 1.0. We have 7 blocks vertically.
-    const activeBlocks = Math.round(val * 7);
-    return [...Array(7)].map((_, j) => {
+    // val is 0.0 ~ 1.0. We have 16 blocks vertically.
+    const activeBlocks = Math.round(val * 16);
+    return [...Array(16)].map((_, j) => {
       const isActive = j < activeBlocks;
-      const isTop = j >= 5; // top 2 blocks show highlight
+      const isTop = j >= 13; // top 3 blocks show highlight
       
       let baseClass = "bg-sky-950/10";
       let activeClass = "";
@@ -275,7 +339,7 @@ export default function App() {
         return (
           <div 
             key={j}
-            className={`w-full h-1.5 transition-all duration-75 ${isPeak ? activeClass : 'bg-transparent'}`}
+            className={`w-full h-1 ${isPeak ? activeClass : 'bg-transparent'}`}
           />
         );
       }
@@ -283,10 +347,20 @@ export default function App() {
       return (
         <div 
           key={j}
-          className={`w-full h-1.5 transition-all duration-75 ${isActive ? activeClass : baseClass}`}
+          className={`w-full h-1 ${isActive ? activeClass : baseClass}`}
         />
       );
     });
+  };
+
+  const getVfdFontFamily = () => {
+    switch (vfdFont) {
+      case "pixel": return "'VT323', monospace";
+      case "vfd": return "'Share Tech Mono', monospace";
+      case "dot": return "'DotGothic16', sans-serif";
+      case "digital": return "'Orbitron', sans-serif";
+      default: return "'VT323', monospace";
+    }
   };
 
   const vfdLines = [songData.artist];
@@ -329,7 +403,7 @@ export default function App() {
          
          <div className="flex w-full h-full gap-8 relative z-10 pointer-events-none">
             {/* Album Art Area */}
-            <div className={`w-64 h-64 rounded-2xl bg-gradient-to-br ${isSpotifyMode ? 'from-green-500/20 to-emerald-900/40' : 'from-indigo-500 to-purple-600'} shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex items-center justify-center relative overflow-hidden`}>
+            <div className={`w-64 h-64 rounded-2xl bg-gradient-to-br ${getThemeGradientClass()} shadow-[0_10px_30px_rgba(0,0,0,0.5)] flex items-center justify-center relative overflow-hidden`}>
                {(apiData.albumArtUrl || songData.thumbnail_base64) ? (
                  <img src={apiData.albumArtUrl || songData.thumbnail_base64} alt="Album Art" className="w-full h-full object-cover" />
                ) : (
@@ -341,15 +415,129 @@ export default function App() {
             {/* Track Info & Visualizer Area */}
             <div className="flex-1 flex flex-col justify-center">
                <div className="flex items-center justify-between mb-2 pointer-events-auto">
-                  <div className={`flex items-center gap-2 font-semibold tracking-wider text-sm ${isSpotifyMode ? 'text-[#1DB954]' : 'text-blue-400'}`}>
+                  <div className={`flex items-center gap-2 font-semibold tracking-wider text-sm ${getThemeTextClass()}`}>
                     <Radio size={16} className="animate-pulse" /> NOW PLAYING {isSpotifyMode && "ON SPOTIFY"}
                   </div>
-                  <button onClick={() => setShowDetails(!showDetails)} className={`p-1.5 hover:bg-white/10 rounded-md transition-colors ${isSpotifyMode ? 'text-[#1DB954]' : 'text-blue-400'}`} title="Toggle Details">
-                    {showDetails ? <X size={16} /> : <Info size={16} />}
-                  </button>
+                  <div className="flex gap-2">
+                    <button 
+                      onClick={() => {
+                        setShowSettings(!showSettings);
+                        if (showDetails) setShowDetails(false);
+                      }} 
+                      className={`p-1.5 hover:bg-white/10 rounded-md transition-colors ${showSettings ? getThemeTextClass() : 'text-white/40'}`}
+                      title="Visualizer Settings"
+                    >
+                      <Sliders size={16} />
+                    </button>
+                    <button 
+                      onClick={() => {
+                        setShowDetails(!showDetails);
+                        if (showSettings) setShowSettings(false);
+                      }} 
+                      className={`p-1.5 hover:bg-white/10 rounded-md transition-colors ${showDetails ? getThemeTextClass() : 'text-white/40'}`}
+                      title="Toggle Details"
+                    >
+                      {showDetails ? <X size={16} /> : <Info size={16} />}
+                    </button>
+                  </div>
                </div>
                
-               {showDetails ? (
+               {showSettings ? (
+                  <div className="flex-1 flex flex-col justify-center animate-in fade-in slide-in-from-bottom-4 duration-300 pointer-events-auto">
+                     <h3 className="text-white/50 text-xs font-bold uppercase tracking-widest mb-3">Visualizer Settings</h3>
+                     
+                     <div className="space-y-4 max-w-md">
+                        {/* Sensitivity Slider */}
+                        <div className="flex flex-col gap-1.5">
+                           <div className="flex justify-between text-sm text-white/80">
+                              <span>Sensitivity (感度)</span>
+                              <span className={`font-mono ${getThemeTextClass()}`}>{sensitivity}%</span>
+                           </div>
+                           <input 
+                              type="range" 
+                              min="10" 
+                              max="400" 
+                              value={sensitivity} 
+                              onChange={(e) => handleSensitivityChange(Number(e.target.value))}
+                              className={`w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer ${getThemeAccentClass()} no-drag`}
+                           />
+                           <div className="flex justify-between text-[10px] text-white/40">
+                              <span>Low (10%)</span>
+                              <span>High (400%)</span>
+                           </div>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                           <div className="flex justify-between text-sm text-white/80">
+                              <span>Smoothing (応答性・滑らかさ)</span>
+                              <span className={`font-mono ${getThemeTextClass()}`}>{smoothing}%</span>
+                           </div>
+                           <input 
+                              type="range" 
+                              min="0" 
+                              max="95" 
+                              value={smoothing} 
+                              onChange={(e) => handleSmoothingChange(Number(e.target.value))}
+                              className={`w-full h-1.5 bg-white/10 rounded-lg appearance-none cursor-pointer ${getThemeAccentClass()} no-drag`}
+                           />
+                           <div className="flex justify-between text-[10px] text-white/40">
+                              <span>Fast (0%)</span>
+                              <span>Smooth (95%)</span>
+                           </div>
+                        </div>
+
+                        {/* VFD Display Settings */}
+                        <div className="border-t border-white/10 pt-4 mt-2 flex flex-col gap-3">
+                           <h4 className="text-white/40 text-[10px] font-bold uppercase tracking-widest">VFD Display Settings</h4>
+                           
+                           {/* Font Selector */}
+                           <div className="flex flex-col gap-1.5">
+                              <span className="text-sm text-white/80">Display Font (フォント)</span>
+                              <div className="grid grid-cols-4 gap-1.5 text-xs">
+                                 {[
+                                    { id: 'pixel', name: 'Pixel' },
+                                    { id: 'vfd', name: 'VFD' },
+                                    { id: 'dot', name: 'Retro Dot' },
+                                    { id: 'digital', name: 'Digital' }
+                                 ].map(f => (
+                                    <button
+                                       key={f.id}
+                                       onClick={() => setVfdFont(f.id as any)}
+                                       className={`py-1.5 rounded-md font-semibold text-center border transition-all ${
+                                          vfdFont === f.id 
+                                             ? `bg-white/10 border-current ${getThemeTextClass()} shadow-md` 
+                                             : 'bg-white/5 border-white/5 text-white/60 hover:bg-white/10 hover:text-white'
+                                       }`}
+                                    >
+                                       {f.name}
+                                    </button>
+                                 ))}
+                              </div>
+                           </div>
+
+                           {/* Scroll Mode Toggle */}
+                           <div className="flex items-center justify-between mt-1 text-sm">
+                              <span className="text-white/80">Scroll Style (流れ方)</span>
+                              <div className="flex gap-1.5 bg-white/5 p-0.5 rounded-md border border-white/5">
+                                 <button
+                                    onClick={() => setVfdScrollSteps(false)}
+                                    className={`px-3 py-1 rounded text-xs font-semibold ${!vfdScrollSteps ? `${getThemeBgClass()} text-white shadow-md` : 'text-white/60 hover:text-white'}`}
+                                 >
+                                    Smooth
+                                 </button>
+                                 <button
+                                    onClick={() => setVfdScrollSteps(true)}
+                                    className={`px-3 py-1 rounded text-xs font-semibold ${vfdScrollSteps ? `${getThemeBgClass()} text-white shadow-md` : 'text-white/60 hover:text-white'}`}
+                                 >
+                                    Retro Steps
+                                 </button>
+                              </div>
+                           </div>
+                        </div>
+
+                     </div>
+                  </div>
+               ) : showDetails ? (
                   <div className="flex-1 flex flex-col animate-in fade-in slide-in-from-bottom-4 duration-300 pointer-events-auto">
                      <h3 className="text-white/50 text-xs font-bold uppercase tracking-widest mb-1">Track Details</h3>
                      <h1 className="text-2xl font-bold text-white mb-1" style={{ fontFamily: "'Inter', sans-serif" }}>{songData.title}</h1>
@@ -364,7 +552,7 @@ export default function App() {
                         )}
                      </div>
                      
-                     <button onClick={handleOpenBrowser} className="flex items-center justify-center gap-2 w-max px-4 py-2 rounded-full font-bold text-sm bg-blue-600 text-white hover:bg-blue-500 transition-colors">
+                     <button onClick={handleOpenBrowser} className={`flex items-center justify-center gap-2 w-max px-4 py-2 rounded-full font-bold text-sm ${getThemeBgClass()} text-white transition-colors hover:brightness-110`}>
                         <ExternalLink size={16} /> Search on Google
                       </button>
                   </div>
@@ -405,7 +593,7 @@ export default function App() {
                                  key={`32-${i}`}
                                  animate={{ height: `${Math.min(100, Math.max(10, val * 100))}%` }}
                                  transition={{ type: "spring", stiffness: 300, damping: 20 }}
-                                 className={`w-full rounded-t-sm ${isSpotifyMode ? 'bg-[#1DB954]' : 'bg-cyan-400'}`}
+                                 className={`w-full rounded-t-sm ${getThemeBgClass()}`}
                              />
                          ))}
                      </div>
@@ -418,7 +606,7 @@ export default function App() {
       {/* Retro 2DIN Faceplate (Kenwood DPX-440 Recreation) */}
       <div 
         data-tauri-drag-region="true"
-        className="w-[790px] h-[230px] silver-bezel relative z-10 flex flex-col p-1.5 transform-gpu select-none"
+        className="w-[790px] h-[430px] silver-bezel relative z-10 flex flex-col p-1.5 transform-gpu select-none"
       >
         {/* Top CD Slot & Eject Row */}
         <div className="w-full flex items-center justify-between px-3 h-8 bg-gradient-to-b from-transparent to-black/30 pointer-events-auto">
@@ -454,26 +642,26 @@ export default function App() {
         <div className="flex-1 dark-faceplate p-2 flex gap-2.5 items-stretch relative overflow-hidden">
           
           {/* Left Button Column: AUD, Volume Up, Volume Down, ATT/CLK */}
-          <div className="w-16 flex flex-col justify-between py-1 pointer-events-auto">
-            <button className="dpx-side-btn h-7 text-[8px] font-bold text-center leading-none" title="Audio Adjust">
+          <div className="w-16 flex flex-col justify-between py-2 pointer-events-auto select-none">
+            <button className="dpx-side-btn h-10 text-[9px] font-bold text-center leading-none" title="Audio Adjust">
               AUD
             </button>
-            <div className="flex flex-col gap-1.5 my-1">
+            <div className="flex flex-col gap-3 my-2">
               <button 
-                onClick={() => adjustVolume(0.05)} 
-                className="dpx-side-btn h-9 flex flex-col items-center justify-center gap-0.5"
+                onClick={() => adjustVolume(1)} 
+                className="dpx-side-btn h-14 flex flex-col items-center justify-center gap-1.5"
                 title="Volume Up"
               >
-                <span className="text-[9px]">▲</span>
-                <span className="text-[7px]">VOL</span>
+                <span className="text-[11px]">▲</span>
+                <span className="text-[8px] font-bold">VOL</span>
               </button>
               <button 
-                onClick={() => adjustVolume(-0.05)} 
-                className="dpx-side-btn h-9 flex flex-col items-center justify-center gap-0.5"
+                onClick={() => adjustVolume(-1)} 
+                className="dpx-side-btn h-14 flex flex-col items-center justify-center gap-1.5"
                 title="Volume Down"
               >
-                <span className="text-[7px]">VOL</span>
-                <span className="text-[9px]">▼</span>
+                <span className="text-[8px] font-bold">VOL</span>
+                <span className="text-[11px]">▼</span>
               </button>
             </div>
             <button 
@@ -484,114 +672,155 @@ export default function App() {
                   await invoke("set_system_volume", { level: newMute ? 0 : volume });
                 } catch (e) {}
               }} 
-              className={`dpx-side-btn h-7 flex flex-col items-center justify-center leading-none ${isMuted ? 'text-red-400 font-bold' : ''}`}
+              className={`dpx-side-btn h-10 flex flex-col items-center justify-center leading-none ${isMuted ? 'text-red-400 font-bold' : ''}`}
               title="Attenuator / Clock"
             >
-              <span className="text-[8px]">ATT</span>
-              <span className="text-[6px] opacity-75">CLK</span>
+              <span className="text-[9px]">ATT</span>
+              <span className="text-[7px] opacity-75">CLK</span>
             </button>
           </div>
 
-          {/* Center Screen Cutout Frame */}
-          <div className="flex-1 screen-frame p-1 flex items-stretch min-w-0">
-            {/* Blue VFD Screen */}
-            <div 
-              onWheel={handleVolumeScroll}
-              className="flex-1 heisei-vfd vfd-grid p-2.5 flex flex-col justify-between select-none relative pointer-events-auto cursor-ns-resize min-w-0"
-              title="Scroll to change volume"
-            >
-              {/* Screen Top Status Area */}
-              <div className="flex justify-between items-start text-[9px] font-semibold tracking-wider font-[var(--font-vfd)]">
-                <div className="flex gap-2.5">
-                  <span className={`px-1 border border-sky-500/20 text-[8px] ${themeColor === 'blue' ? 'glow-blue' : themeColor === 'cyan' ? 'glow-cyan' : themeColor === 'green' ? 'glow-green' : 'glow-orange'}`}>DSP</span>
-                  <span className={`px-1 border border-emerald-500/20 text-[8px] ${bassBoost ? 'glow-green' : 'text-emerald-500/20'}`}>LOUD</span>
-                  <span className={`px-1 border border-sky-500/20 text-[8px] ${themeColor === 'blue' ? 'glow-blue' : themeColor === 'cyan' ? 'glow-cyan' : themeColor === 'green' ? 'glow-green' : 'glow-orange'}`}>{eqPreset}</span>
+          {/* Center Screen Cutout Frame & Cassette Slot Container */}
+          <div className="flex-1 flex flex-col gap-2 min-w-0">
+            {/* VFD Screen Frame */}
+            <div className="flex-1 screen-frame p-1 flex items-stretch min-w-0">
+              {/* Blue VFD Screen */}
+              <div 
+                onWheel={handleVolumeScroll}
+                className="flex-1 heisei-vfd vfd-grid p-2.5 flex flex-col justify-between select-none relative pointer-events-auto cursor-ns-resize min-w-0"
+                title="Scroll to change volume"
+              >
+                {/* Screen Top Status Area */}
+                <div 
+                  className="flex justify-between items-start text-[9px] font-semibold tracking-wider"
+                  style={{ fontFamily: getVfdFontFamily() }}
+                >
+                  <div className="flex gap-2.5">
+                    <span className={`px-1 border border-sky-500/20 text-[8px] ${themeColor === 'blue' ? 'glow-blue' : themeColor === 'cyan' ? 'glow-cyan' : themeColor === 'green' ? 'glow-green' : 'glow-orange'}`}>DSP</span>
+                    <span className={`px-1 border border-emerald-500/20 text-[8px] ${bassBoost ? 'glow-green' : 'text-emerald-500/20'}`}>LOUD</span>
+                    <span className={`px-1 border border-sky-500/20 text-[8px] ${themeColor === 'blue' ? 'glow-blue' : themeColor === 'cyan' ? 'glow-cyan' : themeColor === 'green' ? 'glow-green' : 'glow-orange'}`}>{eqPreset}</span>
+                  </div>
+                  <div className={`text-[9px] ${themeColor === 'blue' ? 'glow-blue' : themeColor === 'cyan' ? 'glow-cyan' : themeColor === 'green' ? 'glow-green' : 'glow-orange'} flex items-center gap-1`}>
+                    <span>{isPlaying ? "DISC ▶" : "PAUSE ❚❚"}</span>
+                    {isMuted && <span className="text-red-400 font-bold text-[8px] px-0.5 border border-red-500/30">MUTE</span>}
+                  </div>
                 </div>
-                <div className={`text-[9px] ${themeColor === 'blue' ? 'glow-blue' : themeColor === 'cyan' ? 'glow-cyan' : themeColor === 'green' ? 'glow-green' : 'glow-orange'} flex items-center gap-1`}>
-                  <span>{isPlaying ? "DISC ▶" : "PAUSE ❚❚"}</span>
-                  {isMuted && <span className="text-red-400 font-bold text-[8px] px-0.5 border border-red-500/30">MUTE</span>}
-                </div>
-              </div>
 
-              {/* Scrolling Text / Title */}
-              <div className="flex flex-col mt-0.5 min-w-0 w-full">
-                {isVfdTitleLong ? (
-                  <div className="w-full overflow-hidden whitespace-nowrap relative select-none py-1">
-                    <div className={`inline-block animate-marquee font-[var(--font-pixel)] text-3xl tracking-widest uppercase leading-tight ${themeColor === 'blue' ? 'glow-blue' : themeColor === 'cyan' ? 'glow-cyan' : themeColor === 'green' ? 'glow-green' : 'glow-orange'}`}>
-                      <span>{vfdDisplayTitle}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
-                      <span>{vfdDisplayTitle}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+                {/* Scrolling Text / Title */}
+                <div className="flex flex-col mt-0.5 min-w-0 w-full">
+                  {isVfdTitleLong ? (
+                    <div className="w-full overflow-hidden whitespace-nowrap relative select-none py-1">
+                      <div 
+                        className={`inline-block animate-marquee text-3xl tracking-widest uppercase leading-tight ${themeColor === 'blue' ? 'glow-blue' : themeColor === 'cyan' ? 'glow-cyan' : themeColor === 'green' ? 'glow-green' : 'glow-orange'}`}
+                        style={{ 
+                          fontFamily: getVfdFontFamily(),
+                          animation: `marquee 15s ${vfdScrollSteps ? 'steps(30, end)' : 'linear'} infinite`
+                        }}
+                      >
+                        <span>{vfdDisplayTitle}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+                        <span>{vfdDisplayTitle}&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;</span>
+                      </div>
                     </div>
+                  ) : (
+                    <div 
+                      className={`text-3xl tracking-widest truncate uppercase leading-tight ${themeColor === 'blue' ? 'glow-blue' : themeColor === 'cyan' ? 'glow-cyan' : themeColor === 'green' ? 'glow-green' : 'glow-orange'}`}
+                      style={{ fontFamily: getVfdFontFamily() }}
+                    >
+                      {vfdDisplayTitle}
+                    </div>
+                  )}
+                  <div 
+                    className={`text-[11px] tracking-wider uppercase ${themeColor === 'blue' ? 'glow-blue' : themeColor === 'cyan' ? 'glow-cyan' : themeColor === 'green' ? 'glow-green' : 'glow-orange'} opacity-85 mt-0.5 flex justify-between items-center w-full min-w-0 gap-2`}
+                    style={{ fontFamily: getVfdFontFamily() }}
+                  >
+                    <span className="truncate flex-1 min-w-0">{currentVfdLine.toUpperCase()}</span>
+                    <span className="text-[10px] opacity-75 font-mono shrink-0">VOL: {Math.round(volume * 35)}</span>
                   </div>
-                ) : (
-                  <div className={`font-[var(--font-pixel)] text-3xl tracking-widest truncate uppercase leading-tight ${themeColor === 'blue' ? 'glow-blue' : themeColor === 'cyan' ? 'glow-cyan' : themeColor === 'green' ? 'glow-green' : 'glow-orange'}`}>
-                    {vfdDisplayTitle}
-                  </div>
-                )}
-                <div className={`font-[var(--font-vfd)] text-[11px] tracking-wider uppercase ${themeColor === 'blue' ? 'glow-blue' : themeColor === 'cyan' ? 'glow-cyan' : themeColor === 'green' ? 'glow-green' : 'glow-orange'} opacity-85 mt-0.5 flex justify-between items-center w-full min-w-0 gap-2`}>
-                  <span className="truncate flex-1 min-w-0">{currentVfdLine.toUpperCase()}</span>
-                  <span className="text-[10px] opacity-75 font-mono shrink-0">VOL: {Math.round(volume * 35)}</span>
+                </div>
+
+                {/* Symmetrical visualizer */}
+                <div className="h-28 w-full flex items-end justify-between gap-[3px] mt-1.5 opacity-90">
+                  {symBands16.map((val, i) => (
+                    <div key={i} className="flex-1 flex flex-col-reverse gap-[1px]">
+                      {renderDpxBand(val)}
+                    </div>
+                  ))}
                 </div>
               </div>
+            </div>
 
-              {/* Symmetrical visualizer */}
-              <div className="h-9 w-full flex items-end justify-between gap-[3px] mt-1.5 opacity-90">
-                {symBands16.map((val, i) => (
-                  <div key={i} className="flex-1 flex flex-col-reverse gap-[1px]">
-                    {renderDpxBand(val)}
-                  </div>
-                ))}
+            {/* Cassette Deck Face */}
+            <div className="h-16 screen-frame p-1 flex items-stretch">
+              <div className="flex-1 bg-[#101114] border border-black/40 rounded-lg flex flex-col justify-center items-center shadow-[inset_0_4px_12px_rgba(0,0,0,0.95)] px-6 relative overflow-hidden">
+                {/* Horizontal Slit for Cassette */}
+                <div className="w-full h-3.5 bg-[#050506] rounded border border-neutral-900 shadow-[inset_0_3px_6px_rgba(0,0,0,1)] relative flex items-center justify-between px-6">
+                  {/* Cassette Guide Rails */}
+                  <div className="w-3 h-0.5 bg-neutral-800 rounded-sm"></div>
+                  <div className="w-1.5 h-1.5 rounded-full bg-neutral-900 shadow-[inset_0_1px_1px_rgba(0,0,0,0.8)]"></div>
+                  <div className="w-1.5 h-1.5 rounded-full bg-neutral-900 shadow-[inset_0_1px_1px_rgba(0,0,0,0.8)]"></div>
+                  <div className="w-3 h-0.5 bg-neutral-800 rounded-sm"></div>
+                  
+                  {/* Insert Glow */}
+                  <div className="absolute inset-0 bg-cyan-400/5 hover:bg-cyan-400/10 pointer-events-none transition-colors"></div>
+                </div>
+                {/* Retro Silk Screen Text */}
+                <div className="flex justify-between w-full text-[7px] text-neutral-500 font-semibold tracking-widest mt-1 font-sans select-none opacity-80 px-2">
+                  <span>◀ AUTO REVERSE ▶</span>
+                  <span className="text-[6px] text-neutral-600 font-bold">FULL LOGIC CONTROL</span>
+                  <span>DOLBY B-C NR</span>
+                </div>
               </div>
             </div>
           </div>
 
           {/* Right Button Column: FM+, Seek Up/Down, AM-, Play/Pause */}
-          <div className="w-16 flex flex-col justify-between py-1 pointer-events-auto">
+          <div className="w-16 flex flex-col justify-between py-2 pointer-events-auto select-none">
             <button 
               onClick={() => setThemeColor(prev => prev === 'blue' ? 'cyan' : prev === 'cyan' ? 'green' : prev === 'green' ? 'orange' : 'blue')}
-              className="dpx-side-btn h-7 text-[8px] font-bold text-center leading-none" 
+              className="dpx-side-btn h-10 text-[9px] font-bold text-center leading-none" 
               title="Change Theme Color"
             >
               FM+
             </button>
-            <div className="flex flex-col gap-1.5 my-1">
+            <div className="flex flex-col gap-3 my-2">
               <button 
                 onClick={handleSkipPrev} 
-                className="dpx-side-btn h-9 flex flex-col items-center justify-center gap-0.5"
+                className="dpx-side-btn h-14 flex flex-col items-center justify-center gap-1"
                 title="Seek/Track Previous"
               >
-                <span className="text-[9px]">◀◀</span>
-                <span className="text-[7px]">SEEK</span>
+                <span className="text-[11px]">◀◀</span>
+                <span className="text-[7px] font-bold">SEEK</span>
               </button>
               <button 
                 onClick={handleSkipNext} 
-                className="dpx-side-btn h-9 flex flex-col items-center justify-center gap-0.5"
+                className="dpx-side-btn h-14 flex flex-col items-center justify-center gap-1"
                 title="Seek/Track Next"
               >
-                <span className="text-[7px]">SEEK</span>
-                <span className="text-[9px]">▶▶</span>
+                <span className="text-[7px] font-bold">SEEK</span>
+                <span className="text-[11px]">▶▶</span>
               </button>
             </div>
             <button 
               onClick={handlePlayPause}
-              className="dpx-side-btn h-7 flex flex-col items-center justify-center leading-none text-[#10b981]"
+              className="dpx-side-btn h-10 flex flex-col items-center justify-center leading-none text-[#10b981]"
               title="Play / Pause"
             >
-              <span className="text-[8px]">{isPlaying ? "PAUSE" : "PLAY"}</span>
-              <span className="text-[6px] opacity-75">{isPlaying ? "❚❚" : "▶"}</span>
+              <span className="text-[9px] font-bold">{isPlaying ? "PAUSE" : "PLAY"}</span>
+              <span className="text-[7px] opacity-75">{isPlaying ? "❚❚" : "▶"}</span>
             </button>
           </div>
           
         </div>
 
         {/* Bottom Presets Row */}
-        <div className="w-full h-8 bg-gradient-to-t from-transparent to-black/20 flex items-center justify-between px-3 gap-2 pointer-events-auto">
+        <div className="w-full h-10 bg-gradient-to-t from-transparent to-black/20 flex items-center justify-between px-3 gap-2 pointer-events-auto mt-0.5">
           {/* Small bottom left keys: DSP OFF, DSP DEMO */}
           <div className="flex gap-1.5">
             <button 
               onClick={() => {
                 setBassBoost(prev => !prev);
               }}
-              className="px-1.5 py-0.5 text-[7px] font-semibold border border-neutral-600 rounded bg-gradient-to-b from-neutral-800 to-neutral-900 text-neutral-300 active:scale-95"
+              className="px-2 py-1 text-[8px] font-bold border border-neutral-600 rounded bg-gradient-to-b from-neutral-800 to-neutral-900 text-neutral-300 active:scale-95 transition-transform"
               title="Toggle DSP Off"
             >
               DSP OFF
@@ -602,7 +831,7 @@ export default function App() {
                 setEqPreset('ROCK');
                 setBassBoost(true);
               }}
-              className="px-1.5 py-0.5 text-[7px] font-semibold border border-neutral-600 rounded bg-gradient-to-b from-neutral-800 to-neutral-900 text-[#22d3ee] active:scale-95"
+              className="px-2 py-1 text-[8px] font-bold border border-neutral-600 rounded bg-gradient-to-b from-neutral-800 to-neutral-900 text-[#22d3ee] active:scale-95 transition-transform"
               title="DSP Demo"
             >
               DEMO
@@ -610,14 +839,14 @@ export default function App() {
           </div>
 
           {/* Presets 1 to 6 */}
-          <div className="flex-1 flex justify-center gap-1.5 max-w-[420px]">
-            <button onClick={() => setVfdScrollMode(p => !p)} className="dpx-preset-btn flex-1 py-1 text-center" title="Toggle Title Scroll">
+          <div className="flex-1 flex justify-center gap-2 max-w-[440px]">
+            <button onClick={() => setVfdScrollMode(p => !p)} className="dpx-preset-btn flex-1 py-1.5 text-[10px] font-bold text-center" title="Toggle Title Scroll">
               1 TIME
             </button>
-            <button onClick={() => setThemeColor(prev => prev === 'blue' ? 'cyan' : prev === 'cyan' ? 'green' : prev === 'green' ? 'orange' : 'blue')} className="dpx-preset-btn flex-1 py-1 text-center" title="Cycle Theme Colors">
+            <button onClick={() => setThemeColor(prev => prev === 'blue' ? 'cyan' : prev === 'cyan' ? 'green' : prev === 'green' ? 'orange' : 'blue')} className="dpx-preset-btn flex-1 py-1.5 text-[10px] font-bold text-center" title="Cycle Theme Colors">
               2 SCN
             </button>
-            <button onClick={() => setBassBoost(p => !p)} className={`dpx-preset-btn flex-1 py-1 text-center ${bassBoost ? 'border-emerald-500' : ''}`} title="Toggle Heavy Bass (LOUD)">
+            <button onClick={() => setBassBoost(p => !p)} className={`dpx-preset-btn flex-1 py-1.5 text-[10px] font-bold text-center ${bassBoost ? 'border-emerald-500 text-emerald-600' : ''}`} title="Toggle Heavy Bass (LOUD)">
               3 RDM
             </button>
             <button 
@@ -626,7 +855,7 @@ export default function App() {
                 const nextIdx = (presets.indexOf(eqPreset) + 1) % presets.length;
                 setEqPreset(presets[nextIdx]);
               }} 
-              className="dpx-preset-btn flex-1 py-1 text-center" 
+              className="dpx-preset-btn flex-1 py-1.5 text-[10px] font-bold text-center" 
               title="Cycle Equalizer Presets"
             >
               4 REF
@@ -635,7 +864,7 @@ export default function App() {
               onClick={() => {
                 setAnalyzerStyle(prev => prev === 'BARS' ? 'PEAK' : prev === 'PEAK' ? 'WAVE' : 'BARS');
               }} 
-              className="dpx-preset-btn flex-1 py-1 text-center"
+              className="dpx-preset-btn flex-1 py-1.5 text-[10px] font-bold text-center"
               title="Change Visualizer Drawing Style"
             >
               5 D.SCRN
@@ -648,7 +877,7 @@ export default function App() {
                   await invoke("set_system_volume", { level: newMute ? 0 : volume });
                 } catch (e) {}
               }} 
-              className={`dpx-preset-btn flex-1 py-1 text-center ${isMuted ? 'text-red-500 font-bold' : ''}`} 
+              className={`dpx-preset-btn flex-1 py-1.5 text-[10px] font-bold text-center ${isMuted ? 'text-red-500 font-bold' : ''}`} 
               title="Mute volume"
             >
               6 M.RDM
@@ -658,7 +887,7 @@ export default function App() {
           {/* Translucent Green-Cyan SRC Button */}
           <button 
             onClick={handlePlayPause}
-            className="w-14 h-6 text-[8px] font-black tracking-wider uppercase translucent-src rounded flex items-center justify-center shadow-md active:scale-95"
+            className="w-16 h-7 text-[9px] font-black tracking-wider uppercase translucent-src rounded flex items-center justify-center shadow-md active:scale-95 transition-transform"
             title="Source Play / Pause"
           >
             SRC

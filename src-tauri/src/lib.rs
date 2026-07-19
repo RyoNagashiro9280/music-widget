@@ -25,7 +25,9 @@ pub fn run() {
             smtc::media_skip_next,
             smtc::media_skip_previous,
             volume::get_system_volume,
-            volume::set_system_volume
+            volume::set_system_volume,
+            audio::get_visualizer_settings,
+            audio::set_visualizer_settings
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

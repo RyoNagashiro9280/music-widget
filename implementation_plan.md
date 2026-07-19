@@ -1,33 +1,47 @@
-# Music Widget Development Plan (Retro + Modern Hybrid)
+# Implementation Plan: VFD Font & Scroll Steps Settings
 
-This document outlines the updated implementation plan for the Windows 11 Music Widget, focusing on adding real hardware functionality (Volume, Power, Audio Visualizer).
+オーディオデッキ（VFDディスプレイ）に表示されるテキストのフォントおよびスクロールのアニメーション（滑らか ⇔ カクカク）を設定画面からカスタマイズできるようにします。
+
+---
 
 ## Goal Description
 
-We are moving past the UI prototype phase into hardware integration. 
-- The **Power Button** will now close the widget.
-- The **Volume Knob** will be rotatable (via mouse drag/scroll) and will control the actual Windows system volume.
-- The **Audio Visualizer** will listen to the PC's audio output (loopback) and display a real-time frequency spectrum.
+VFD画面のテキスト表示をよりアナログ風にカスタマイズしたいという要望に基づき、以下の設定項目を追加します。
+1. **フォント変更**: ピクセル風、液晶風に加え、レトロドット（DotGothic16）、未来デジタル（Orbitron）の4種類から選択可能にします。
+2. **スクロールの流れ方**: スムーズなアニメーションと、古いディスプレイのような「カクカクとコマ送りで流れる（Retro Steps）」アニメーションを切り替え可能にします。
 
-## User Review Required
+---
 
-> [!IMPORTANT]
-> **Real Audio Analysis & System Control**
-> Implementing real audio analysis and volume control requires interacting deeply with the Windows API (WASAPI and Endpoint Volume). 
-> This is a major update to the Rust backend. Please approve this plan to proceed with these complex integrations.
+## Proposed Changes
 
-## Proposed Implementation Phases
+### Frontend (React & TypeScript)
 
-### Phase 1: Eject Bugfix & Power Button (Completed/In Progress)
-- **Eject Fix**: Simplified the window resizing logic to prevent out-of-bounds errors. The eject button should now reliably trigger the pop-up screen (expanding downwards for safety).
-- **Power Button**: Hook up the Power button to `getCurrentWindow().close()` to safely exit the app.
+#### [MODIFY] [index.css](file:///c:/Users/ryo82/.gemini/antigravity/scratch/music-widget/src/index.css)
+- Google Fonts から `DotGothic16` および `Orbitron` を追加インポートするように `@import` のURLを更新。
 
-### Phase 2: System Volume Control
-- **Rust Backend**: Use the `windows` crate (`IMMDeviceEnumerator`, `IAudioEndpointVolume`) to get and set the Windows master volume.
-- **React Frontend**: Make the Rotary Knob interactive using `framer-motion` (drag) or mouse wheel events to dial the volume up and down.
+#### [MODIFY] [App.tsx](file:///c:/Users/ryo82/.gemini/antigravity/scratch/music-widget/src/App.tsx)
+- 状態変数 `vfdFont` (値: `'pixel' | 'vfd' | 'dot' | 'digital'`) および `vfdScrollSteps` (値: `boolean`) を定義。
+- EJECT詳細パネル内の「Visualizer Settings」画面を「Widget Settings」に拡張し、以下のコントロールを追加。
+  - **VFD Font**: Pixel / VFD / Retro Dot / Digital を切り替えるラジオボタンまたは選択ボタン。
+  - **VFD Scroll style**: Smooth / Retro Steps (カクつくスクロール) を切り替えるトグルボタン。
+- VFDの曲名表示部（マーキー部分および非マーキー部分）に対し、選択されたフォント（`fontFamily`）をスタイルで適用。
+- スクロールアニメーション時、`vfdScrollSteps` が有効な場合はインラインスタイルで `animation-timing-function: steps(30, end)` を適用し、無効な場合は `linear` を適用して切り替えを実現。
 
-### Phase 3: Real Audio Visualizer (cpal + rustfft)
-- **Audio Capture**: Use the `cpal` crate to listen to the default output device (WASAPI loopback).
-- **Frequency Analysis**: Use `rustfft` to convert the audio waveform into frequency bands (e.g., 16 bands for the VFD, 32 bands for the modern pop-up).
-- **Data Streaming**: Send the frequency data continuously from Rust to React via Tauri events (`app_handle.emit()`).
-- **Frontend Sync**: Update the CSS/Framer Motion visualizers to react to the incoming real data instead of random numbers.
+---
+
+## Verification Plan
+
+### Automated Tests
+- Tauri 開発サーバーの起動確認: `npm run tauri dev`
+- CSS / フォント読み込みエラーのチェック
+
+### Manual Verification
+1. `npm run tauri dev` でアプリを起動し、EJECTボタンで設定パネルを開く。
+2. 設定パネルに追加された「VFD Display Settings」を確認。
+3. **VFD Font の切り替え**:
+   - `VFD` を選択した時、フォントがスマートなデジタル液晶風（Share Tech Mono）になること。
+   - `Retro Dot` を選択した時、日本語を含めてレトロゲーム風の懐かしいドット文字（DotGothic16）になること。
+   - `Digital` を選択した時、未来的なデジタルフォント（Orbitron）になること。
+4. **VFD Scroll style の切り替え**:
+   - `Smooth` 時、曲名テキストが一定速度で滑らかに流れること。
+   - `Retro Steps` 時、曲名テキストが「カクカク」とステップ移動（コマ送り）しながら流れること。

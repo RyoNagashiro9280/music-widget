@@ -14,7 +14,7 @@
       {
         "title": "music-widget",
         "width": 800,
-        "height": 240,
+        "height": 450,
         "resizable": true,
         "maximizable": false,
         "transparent": true,

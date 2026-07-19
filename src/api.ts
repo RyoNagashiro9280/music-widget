@@ -18,6 +18,40 @@ export interface ITunesTrackInfo {
   albumName?: string;
 }
 
+export const cleanTitleString = (title: string): string => {
+  return title
+    .replace(/\(.*?\)/g, '')
+    .replace(/\[.*?\]/g, '')
+    .replace(/（.*?）/g, '')
+    .replace(/［.*?］/g, '')
+    .trim();
+};
+
+const cleanCompareString = (str: string): string => {
+  return str
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/[.,\/#!$%\^&\*;:{}=\-_`~()\[\]（）［］'"]/g, '')
+    .replace(/feat\.?/g, '')
+    .replace(/and/g, '')
+    .replace(/with/g, '')
+    .trim();
+};
+
+const validateResult = (origTitle: string, origArtist: string, resTitle: string, resArtist: string): boolean => {
+  const cOrigTitle = cleanCompareString(cleanTitleString(origTitle));
+  const cOrigArtist = cleanCompareString(origArtist);
+  const cResTitle = cleanCompareString(cleanTitleString(resTitle));
+  const cResArtist = cleanCompareString(resArtist);
+
+  if (!cOrigTitle || !cOrigArtist) return true;
+
+  const titleMatches = cResTitle.includes(cOrigTitle) || cOrigTitle.includes(cResTitle);
+  const artistMatches = cResArtist.includes(cOrigArtist) || cOrigArtist.includes(cResArtist);
+
+  return titleMatches && artistMatches;
+};
+
 let spotifyAccessToken: string | null = null;
 let spotifyTokenExpiresAt: number = 0;
 
@@ -61,8 +95,7 @@ export const searchSpotifyTrack = async (title: string, artist: string): Promise
   if (!token) return null;
 
   try {
-    // Basic cleanup of title to improve search
-    const cleanTitle = title.replace(/\(.*\)/, '').replace(/\[.*\]/, '').trim();
+    const cleanTitle = cleanTitleString(title);
     const query = encodeURIComponent(`track:${cleanTitle} artist:${artist}`);
     const response = await fetch(`https://api.spotify.com/v1/search?q=${query}&type=track&limit=1`, {
       headers: {
@@ -74,11 +107,17 @@ export const searchSpotifyTrack = async (title: string, artist: string): Promise
       const data = await response.json();
       const track = data.tracks?.items?.[0];
       if (track) {
-        return {
-          url: track.external_urls?.spotify,
-          albumArtUrl: track.album?.images?.[0]?.url,
-          releaseYear: track.album?.release_date?.substring(0, 4)
-        };
+        const trackTitle = track.name || '';
+        const trackArtist = track.artists?.map((a: any) => a.name).join(', ') || '';
+        if (validateResult(title, artist, trackTitle, trackArtist)) {
+          return {
+            url: track.external_urls?.spotify,
+            albumArtUrl: track.album?.images?.[0]?.url,
+            releaseYear: track.album?.release_date?.substring(0, 4)
+          };
+        } else {
+          console.warn(`Spotify match rejected. Expected: "${title}" by "${artist}", Got: "${trackTitle}" by "${trackArtist}"`);
+        }
       }
     }
   } catch (error) {
@@ -90,7 +129,7 @@ export const searchSpotifyTrack = async (title: string, artist: string): Promise
 
 export const getMusicBrainzData = async (title: string, artist: string): Promise<MusicBrainzInfo | null> => {
   try {
-    const cleanTitle = title.replace(/\(.*\)/, '').replace(/\[.*\]/, '').trim();
+    const cleanTitle = cleanTitleString(title);
     const query = encodeURIComponent(`recording:"${cleanTitle}" AND artist:"${artist}"`);
     const response = await fetch(`https://musicbrainz.org/ws/2/recording?query=${query}&fmt=json`, {
       headers: {
@@ -103,27 +142,33 @@ export const getMusicBrainzData = async (title: string, artist: string): Promise
       const data = await response.json();
       const recording = data.recordings?.[0];
       if (recording) {
-        // Find earliest release year
-        const releases = recording.releases || [];
-        let earliestYear = 9999;
-        for (const r of releases) {
-          if (r.date) {
-            const year = parseInt(r.date.substring(0, 4), 10);
-            if (!isNaN(year) && year > 1900 && year < earliestYear) {
-              earliestYear = year;
+        const trackTitle = recording.title || '';
+        const trackArtist = recording['artist-credit']?.map((c: any) => c.name).join(', ') || '';
+        if (validateResult(title, artist, trackTitle, trackArtist)) {
+          // Find earliest release year
+          const releases = recording.releases || [];
+          let earliestYear = 9999;
+          for (const r of releases) {
+            if (r.date) {
+              const year = parseInt(r.date.substring(0, 4), 10);
+              if (!isNaN(year) && year > 1900 && year < earliestYear) {
+                earliestYear = year;
+              }
             }
           }
+
+          // Find tags/genres
+          const tags = recording.tags || [];
+          tags.sort((a: any, b: any) => (b.count || 0) - (a.count || 0));
+          const genres = tags.slice(0, 3).map((t: any) => t.name);
+
+          return {
+            releaseYear: earliestYear !== 9999 ? earliestYear.toString() : undefined,
+            genres
+          };
+        } else {
+          console.warn(`MusicBrainz match rejected. Expected: "${title}" by "${artist}", Got: "${trackTitle}" by "${trackArtist}"`);
         }
-
-        // Find tags/genres
-        const tags = recording.tags || [];
-        tags.sort((a: any, b: any) => (b.count || 0) - (a.count || 0));
-        const genres = tags.slice(0, 3).map((t: any) => t.name);
-
-        return {
-          releaseYear: earliestYear !== 9999 ? earliestYear.toString() : undefined,
-          genres
-        };
       }
     }
   } catch (error) {
@@ -135,19 +180,25 @@ export const getMusicBrainzData = async (title: string, artist: string): Promise
 
 export const searchiTunesTrack = async (title: string, artist: string): Promise<ITunesTrackInfo | null> => {
   try {
-    const cleanTitle = title.replace(/\(.*\)/, '').replace(/\[.*\]/, '').trim();
+    const cleanTitle = cleanTitleString(title);
     const query = encodeURIComponent(`${cleanTitle} ${artist}`);
     const response = await fetch(`https://itunes.apple.com/search?term=${query}&entity=song&limit=1`);
     if (response.ok) {
       const data = await response.json();
       const track = data.results?.[0];
       if (track) {
-        return {
-          albumArtUrl: track.artworkUrl100 ? track.artworkUrl100.replace('100x100bb.jpg', '600x600bb.jpg') : undefined,
-          releaseYear: track.releaseDate ? track.releaseDate.substring(0, 4) : undefined,
-          genre: track.primaryGenreName,
-          albumName: track.collectionName
-        };
+        const trackTitle = track.trackName || '';
+        const trackArtist = track.artistName || '';
+        if (validateResult(title, artist, trackTitle, trackArtist)) {
+          return {
+            albumArtUrl: track.artworkUrl100 ? track.artworkUrl100.replace('100x100bb.jpg', '600x600bb.jpg') : undefined,
+            releaseYear: track.releaseDate ? track.releaseDate.substring(0, 4) : undefined,
+            genre: track.primaryGenreName,
+            albumName: track.collectionName
+          };
+        } else {
+          console.warn(`iTunes match rejected. Expected: "${title}" by "${artist}", Got: "${trackTitle}" by "${trackArtist}"`);
+        }
       }
     }
   } catch (error) {
