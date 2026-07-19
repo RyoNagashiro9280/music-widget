@@ -1,0 +1,276 @@
+@import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=VT323&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-vfd: "Share Tech Mono", monospace;
+  --font-pixel: "VT323", monospace;
+}
+
+body, html {
+  margin: 0;
+  padding: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: transparent !important;
+  overflow: hidden;
+  user-select: none;
+}
+
+[data-tauri-drag-region] {
+  -webkit-app-region: drag;
+  cursor: grab;
+}
+
+[data-tauri-drag-region]:active {
+  cursor: grabbing;
+}
+
+.plastic-casing {
+  background: #151515;
+  background-image: radial-gradient(circle, #1a1a1a 1px, transparent 1px);
+  background-size: 3px 3px;
+  box-shadow: 
+    inset 0px 3px 5px rgba(255,255,255,0.1), 
+    inset 0px -5px 10px rgba(0,0,0,0.8), 
+    inset 5px 0px 10px rgba(0,0,0,0.5), 
+    inset -5px 0px 10px rgba(0,0,0,0.5), 
+    0 15px 25px rgba(0,0,0,0.9);
+  border-radius: 8px;
+  border: 2px solid #000;
+}
+
+.brushed-metal {
+  background: linear-gradient(90deg, #333 0%, #444 10%, #2a2a2a 50%, #444 90%, #333 100%);
+  box-shadow: inset 0 1px 2px rgba(255,255,255,0.2), inset 0 -1px 2px rgba(0,0,0,0.5);
+}
+
+.vfd-screen {
+  background: #02050a;
+  box-shadow: inset 0px 5px 15px rgba(0,0,0,1), 0px 1px 0px rgba(255,255,255,0.15);
+  border-radius: 4px;
+  border: 3px solid #0a0a0a;
+  position: relative;
+  overflow: hidden;
+}
+
+.vfd-screen::after {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.4) 50%);
+  background-size: 100% 4px;
+  pointer-events: none;
+  z-index: 50;
+  mix-blend-mode: overlay;
+}
+
+.vfd-text-cyan {
+  color: #00ffcc;
+  text-shadow: 0 0 6px rgba(0, 255, 204, 0.9), 0 0 12px rgba(0, 255, 204, 0.5);
+}
+
+.vfd-text-green {
+  color: #39ff14;
+  text-shadow: 0 0 6px rgba(57, 255, 20, 0.9), 0 0 12px rgba(57, 255, 20, 0.5);
+}
+
+.vfd-text-dim {
+  color: #00ffcc;
+  opacity: 0.2;
+}
+
+.chunky-btn {
+  background: linear-gradient(to bottom, #2a2a2a, #111);
+  border: 1px solid #000;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,0.15), 0 3px 5px rgba(0,0,0,0.9);
+  border-radius: 3px;
+  color: #999;
+  transition: all 0.1s;
+  position: relative;
+}
+
+.chunky-btn::after {
+  content: "";
+  position: absolute;
+  top: 10%; left: 10%; right: 10%; height: 40%;
+  background: linear-gradient(to bottom, rgba(255,255,255,0.05), transparent);
+  border-radius: 2px;
+}
+
+.chunky-btn:active {
+  background: #0a0a0a;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.9), 0 1px 1px rgba(255,255,255,0.1);
+  transform: translateY(2px);
+  color: #ccc;
+}
+
+/* CD Slot styling */
+.cd-slot {
+  background: #0d0d0f;
+  box-shadow: inset 0px 3px 5px rgba(0,0,0,1), 0 1px 0 rgba(255,255,255,0.1);
+  border-radius: 4px;
+}
+
+/* DPX-440 Silver Bezel styling */
+.silver-bezel {
+  background: linear-gradient(135deg, #e4e6eb 0%, #c0c3ca 15%, #9297a1 50%, #c0c3ca 85%, #e4e6eb 100%);
+  border: 4px solid #9297a1;
+  border-top-color: #f1f3f7;
+  border-left-color: #f1f3f7;
+  border-bottom-color: #6a6f78;
+  border-right-color: #6a6f78;
+  box-shadow: 
+    inset 0 2px 4px rgba(255,255,255,0.9), 
+    inset 0 -2px 4px rgba(0,0,0,0.5),
+    0 15px 30px rgba(0,0,0,0.85);
+  border-radius: 12px;
+}
+
+/* Inset black faceplate inside silver bezel */
+.dark-faceplate {
+  background: #141517;
+  background-image: 
+    radial-gradient(circle, #202124 1px, transparent 1px),
+    linear-gradient(to bottom, #0c0c0d 0%, #18191b 100%);
+  background-size: 3px 3px, 100% 100%;
+  box-shadow: 
+    inset 0px 4px 10px rgba(0,0,0,0.95),
+    0px 1px 1px rgba(255,255,255,0.1);
+  border: 1px solid #080809;
+  border-radius: 8px;
+}
+
+/* Rounded screen cutout bezel style */
+.screen-frame {
+  background: linear-gradient(to bottom, #090a0c, #1d1e22);
+  border: 2px solid #282a2e;
+  box-shadow: inset 0 2px 5px rgba(0,0,0,0.8), 0 1px 0 rgba(255,255,255,0.08);
+  border-radius: 12px;
+}
+
+/* Heisei Blue VFD display screen */
+.heisei-vfd {
+  background: radial-gradient(circle at center, #001d3d 0%, #000611 100%);
+  box-shadow: 
+    inset 0px 10px 20px rgba(0,0,0,0.95), 
+    0px 0px 15px rgba(0, 80, 255, 0.25);
+  border-radius: 6px;
+  border: 2px solid #050607;
+  position: relative;
+  overflow: hidden;
+}
+
+/* Blue-glow grid background */
+.vfd-grid {
+  background-image: 
+    linear-gradient(rgba(0, 150, 255, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 150, 255, 0.04) 1px, transparent 1px);
+  background-size: 8px 8px;
+}
+
+/* Glow classes for text/elements */
+.glow-blue {
+  color: #38bdf8;
+  text-shadow: 0 0 5px rgba(56, 189, 248, 0.8), 0 0 10px rgba(56, 189, 248, 0.4);
+}
+
+.glow-cyan {
+  color: #22d3ee;
+  text-shadow: 0 0 5px rgba(34, 211, 238, 0.8), 0 0 10px rgba(34, 211, 238, 0.4);
+}
+
+.glow-green {
+  color: #4ade80;
+  text-shadow: 0 0 5px rgba(74, 222, 128, 0.8), 0 0 10px rgba(74, 222, 128, 0.4);
+}
+
+.glow-orange {
+  color: #fb923c;
+  text-shadow: 0 0 5px rgba(251, 146, 60, 0.8), 0 0 10px rgba(251, 146, 60, 0.4);
+}
+
+/* LED Indicator in CD Slot */
+.cd-led {
+  background: #22c55e;
+  box-shadow: 0 0 8px #22c55e, 0 0 15px #22c55e;
+}
+
+/* Heisei Translucent Cyan Source Button */
+.translucent-src {
+  background: radial-gradient(circle at center, rgba(34, 211, 238, 0.85) 0%, rgba(8, 145, 178, 0.8) 100%);
+  border: 2px solid rgba(34, 211, 238, 0.95);
+  box-shadow: 
+    0 0 10px rgba(34, 211, 238, 0.5),
+    inset 0 2px 4px rgba(255,255,255,0.7),
+    inset 0 -2px 4px rgba(0,0,0,0.5);
+  color: #fff;
+  text-shadow: 0 0 4px rgba(0,0,0,0.7);
+  transition: all 0.1s;
+}
+
+.translucent-src:active {
+  background: radial-gradient(circle at center, rgba(8, 145, 178, 0.95) 0%, rgba(21, 94, 117, 0.95) 100%);
+  box-shadow: 0 0 5px rgba(34, 211, 238, 0.3);
+  transform: scale(0.96);
+}
+
+/* Classic Heisei vertical buttons flanking screen */
+.dpx-side-btn {
+  background: linear-gradient(to bottom, #2b2e35, #14161a);
+  border: 1px solid #0c0d10;
+  border-top-color: #40444d;
+  border-left-color: #40444d;
+  border-radius: 4px;
+  color: #9ca3af;
+  box-shadow: 
+    inset 0 1px 1px rgba(255,255,255,0.08),
+    0 2px 3px rgba(0,0,0,0.7);
+  cursor: pointer;
+  transition: all 0.08s;
+}
+
+.dpx-side-btn:active {
+  background: #0d0e11;
+  border-color: #000;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.9);
+  transform: translateY(1px);
+}
+
+/* Preset horizontal silver buttons at the bottom */
+.dpx-preset-btn {
+  background: linear-gradient(to bottom, #eceef2 0%, #babdc5 50%, #979ba4 100%);
+  border: 1px solid #777c86;
+  border-top-color: #f8fafc;
+  border-left-color: #f8fafc;
+  border-radius: 2px;
+  color: #0f172a;
+  box-shadow: 
+    inset 0 1px 1px rgba(255,255,255,0.9),
+    0 2px 3px rgba(0,0,0,0.5);
+  cursor: pointer;
+  transition: all 0.08s;
+}
+
+.dpx-preset-btn:active {
+  background: linear-gradient(to bottom, #979ba4, #babdc5);
+  box-shadow: inset 0 2px 3px rgba(0,0,0,0.5);
+  transform: translateY(1px);
+}
+
+/* VFD Title Marquee Animation */
+@keyframes marquee {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(-50%, 0, 0);
+  }
+}
+
+.animate-marquee {
+  display: inline-block;
+  white-space: nowrap;
+  animation: marquee 12s linear infinite;
+}
+
+
